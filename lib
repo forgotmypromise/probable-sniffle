@@ -68,7 +68,7 @@
 
 -- Library init
     getgenv().library = {
-        directory = "milenium",
+        directory = "polo",
         folders = {
             "/fonts",
             "/configs",
