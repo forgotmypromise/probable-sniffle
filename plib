@@ -596,7 +596,7 @@ a
                     Text = name;
                     Parent = items[ "side_frame" ];
                     Name = "\0";
-                    Text = string.format('<u>%s</u><font color = "rgb(255, 255, 255)">%s</font>', cfg.name, cfg.suffix);
+                    Text = string.format('<u>%s</u><font color = "rgb(255, 255, 255)">%s</font>' cfg.name, cfg.suffix);
                     BackgroundTransparency = 1;
                     Size = dim2(1, 0, 0, 70);
                     TextColor3 = themes.preset.accent;
