@@ -447,8 +447,6 @@ a
                             pcall(function()
                                 local cur = object[property_name]
                                 if property_name == "BackgroundColor3" then
-                                    -- ON toggles / fills that match old accent → new accent
-                                    -- also catch near-matches (float / tween leftovers)
                                     if color_near(cur, old) then
                                         object[property_name] = color
                                     end
@@ -463,6 +461,33 @@ a
                 end
             end
             themes.preset[theme] = color
+
+            -- Force-refresh UI that still has the old accent (tweens / missed registers)
+            pcall(function()
+                if not library["items"] then return end
+                for _, gui in library["items"]:GetDescendants() do
+                    if gui:IsA("Frame") or gui:IsA("TextButton") then
+                        if color_near(gui.BackgroundColor3, old) then
+                            gui.BackgroundColor3 = color
+                        end
+                    end
+                    if gui:IsA("ImageLabel") or gui:IsA("ImageButton") then
+                        if color_near(gui.ImageColor3, old) then
+                            gui.ImageColor3 = color
+                        end
+                    end
+                    if gui:IsA("TextLabel") or gui:IsA("TextButton") then
+                        if color_near(gui.TextColor3, old) then
+                            gui.TextColor3 = color
+                        end
+                    end
+                    if gui:IsA("ScrollingFrame") then
+                        if color_near(gui.ScrollBarImageColor3, old) then
+                            gui.ScrollBarImageColor3 = color
+                        end
+                    end
+                end
+            end)
         end 
 
         function library:connection(signal, callback)
