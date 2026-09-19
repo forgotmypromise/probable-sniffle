@@ -432,14 +432,25 @@ a
         end
 
         function library:update_theme(theme, color)
-            -- Always push accent to every registered instance (fixes accent "sticking")
+            -- Only recolor instances that still use the previous accent (keeps OFF toggles correct)
+            local old = themes.preset[theme]
             local bucket = themes.utility[theme]
             if bucket then
                 for property_name, objects in bucket do
                     for _, object in objects do
                         if object then
                             pcall(function()
-                                object[property_name] = color
+                                local cur = object[property_name]
+                                if property_name == "BackgroundColor3" then
+                                    if cur == old then
+                                        object[property_name] = color
+                                    end
+                                else
+                                    -- text / image / scrollbar can always follow accent
+                                    if cur == old or property_name == "ScrollBarImageColor3" then
+                                        object[property_name] = color
+                                    end
+                                end
                             end)
                         end
                     end
@@ -724,6 +735,62 @@ a
                     )
                 end
 
+                local function open_feature_from_label(label)
+                    if not label then return end
+                    local row = label.Parent
+                    if row and row:IsA("GuiObject") then
+                        row.Visible = true
+                    end
+
+                    -- Find which page Frame contains this label (cached or in tab_holder)
+                    local holder = label
+                    while holder and holder.Parent and holder.Parent ~= library[ "items" ] and holder.Parent ~= items[ "tab_holder" ] and holder.Parent ~= library[ "cache" ] do
+                        holder = holder.Parent
+                    end
+
+                    -- Activate matching sidebar tab button by text
+                    local side = items[ "side_frame" ]
+                    if side then
+                        for _, desc in side:GetDescendants() do
+                            if desc:IsA("TextLabel") or desc:IsA("TextButton") then
+                                local btn = desc:IsA("TextButton") and desc or desc.Parent
+                                if btn and btn:IsA("TextButton") then
+                                    pcall(function()
+                                        -- Use GuiButton events that the lib connects to
+                                        firesignal(btn.MouseButton1Down)
+                                    end)
+                                    pcall(function()
+                                        btn.MouseButton1Click:Fire()
+                                    end)
+                                    pcall(function()
+                                        btn.MouseButton1Down:Fire()
+                                    end)
+                                    -- Stop once label is under an on-screen page
+                                    if label.Parent and label.AbsolutePosition.Y > 0 and label.AbsoluteSize.Y > 0 then
+                                        -- keep going only if still not visible; break on first successful show
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    -- Soft highlight the row
+                    if row and row:IsA("GuiObject") then
+                        pcall(function()
+                            local oldT = row.BackgroundTransparency
+                            local oldC = row.BackgroundColor3
+                            row.BackgroundColor3 = themes.preset.accent
+                            row.BackgroundTransparency = 0.65
+                            task.delay(0.9, function()
+                                pcall(function()
+                                    row.BackgroundTransparency = oldT
+                                    row.BackgroundColor3 = oldC
+                                end)
+                            end)
+                        end)
+                    end
+                end
+
                 local function update_search_results()
                     local q = string.lower(items[ "search_box" ].Text or "")
                     clear_search_results()
@@ -734,23 +801,25 @@ a
                         return
                     end
 
-                    local matches = {}
+                    local matches = {} -- {text=, label=}
                     local seen = {}
                     for _, gui in library[ "items" ]:GetDescendants() do
                         if gui:IsA("TextLabel") then
                             local text = gui.Text or ""
                             local lower = string.lower(text)
-                            if #text > 1 and lower ~= "dropdown" and not string.find(lower, "search", 1, true) then
+                            if #text > 1 and lower ~= "dropdown" and not string.find(lower, "search", 1, true)
+                                and not string.find(lower, "polo", 1, true) then
                                 if string.find(lower, q, 1, true) and not seen[lower] then
                                     seen[lower] = true
-                                    insert(matches, text)
+                                    insert(matches, {text = text, label = gui})
                                     if #matches >= 12 then break end
                                 end
                             end
                         end
                     end
 
-                    for _, name in matches do
+                    for _, match in matches do
+                        local name = match.text
                         local btn = library:create( "TextButton" , {
                             Parent = items[ "search_scroll" ];
                             FontFace = fonts.small;
@@ -780,16 +849,8 @@ a
                             library:tween(btn, {BackgroundColor3 = rgb(32, 32, 38), TextColor3 = rgb(230,230,235)}, Enum.EasingStyle.Quad, 0.12)
                         end)
                         btn.MouseButton1Click:Connect(function()
-                            items[ "search_box" ].Text = name
-                            -- Highlight matching rows in current view
-                            for _, gui in library[ "items" ]:GetDescendants() do
-                                if gui:IsA("TextLabel") and string.lower(gui.Text or "") == string.lower(name) then
-                                    local row = gui.Parent
-                                    if row and row:IsA("GuiObject") then
-                                        row.Visible = true
-                                    end
-                                end
-                            end
+                            items[ "search_box" ].Text = ""
+                            open_feature_from_label(match.label)
                             library:tween(items[ "search_results" ], {Size = dim2(0, 220, 0, 0)}, Enum.EasingStyle.Quad, 0.15)
                         end)
                     end
@@ -797,7 +858,7 @@ a
                     local h = math.clamp(#matches * 32 + 12, 0, 220)
                     if #matches == 0 then
                         h = 40
-                        local empty = library:create( "TextLabel" , {
+                        library:create( "TextLabel" , {
                             Parent = items[ "search_scroll" ];
                             FontFace = fonts.small;
                             Text = "No results";
@@ -3918,8 +3979,21 @@ a
             }
 
             local items = cfg.items; do 
+                -- Dedicated always-on GUI so notifs show even when menu is closed
+                if not library[ "notif_gui" ] or not library[ "notif_gui" ].Parent then
+                    library[ "notif_gui" ] = library:create( "ScreenGui" , {
+                        Parent = coregui;
+                        Name = "PoloNotifs";
+                        Enabled = true;
+                        ResetOnSpawn = false;
+                        ZIndexBehavior = Enum.ZIndexBehavior.Global;
+                        IgnoreGuiInset = true;
+                        DisplayOrder = 999;
+                    });
+                end
+
                 items[ "notification" ] = library:create( "Frame" , {
-                    Parent = library[ "items" ];
+                    Parent = library[ "notif_gui" ];
                     Size = dim2(0, 210, 0, 53);
                     Name = "\0";
                     BorderColor3 = rgb(0, 0, 0);
