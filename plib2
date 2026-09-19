@@ -541,6 +541,7 @@ local Templates = {
         Multi = false,
         DragSelect = false,
         MaxVisibleDropdownItems = 8,
+        Searchable = true,
 
         Callback = function() end,
         Changed = function() end,
@@ -1421,6 +1422,21 @@ function Library:UpdateColorsUsingRegistry()
             if SchemeValue or typeof(Index) == "function" then
                 Instance[Property] = SchemeValue or Index()
             end
+        end
+    end
+end
+
+function Library:ApplyScheme(Partial)
+    if typeof(Partial) ~= "table" then return end
+    for Key, Value in Partial do
+        if Library.Scheme[Key] ~= nil or Key == "AccentColor" or Key == "BackgroundColor" or Key == "MainColor" or Key == "OutlineColor" or Key == "FontColor" then
+            Library.Scheme[Key] = Value
+        end
+    end
+    Library:UpdateColorsUsingRegistry()
+    for _, Option in Options do
+        if Option.UpdateColors then
+            pcall(function() Option:UpdateColors() end)
         end
     end
 end
