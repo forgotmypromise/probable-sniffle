@@ -432,16 +432,20 @@ a
         end
 
         function library:update_theme(theme, color)
-            for _, property in themes.utility[theme] do 
-
-                for m, object in property do 
-                    if object[_] == themes.preset[theme] then 
-                        object[_] = color 
-                    end 
-                end 
-            end 
-
-            themes.preset[theme] = color 
+            -- Always push accent to every registered instance (fixes accent "sticking")
+            local bucket = themes.utility[theme]
+            if bucket then
+                for property_name, objects in bucket do
+                    for _, object in objects do
+                        if object then
+                            pcall(function()
+                                object[property_name] = color
+                            end)
+                        end
+                    end
+                end
+            end
+            themes.preset[theme] = color
         end 
 
         function library:connection(signal, callback)
@@ -617,24 +621,25 @@ a
                     BackgroundColor3 = rgb(255, 255, 255)
                 }); cfg.multi_holder = items[ "multi_holder" ];
 
-                -- Global search bar
+                -- Global search bar + animated results dropdown
                 items[ "search_box" ] = library:create( "TextBox" , {
                     FontFace = fonts.small;
                     TextColor3 = rgb(245, 245, 245);
                     BorderColor3 = rgb(0, 0, 0);
                     Text = "";
-                    PlaceholderText = "Search...";
+                    PlaceholderText = "Search features...";
                     PlaceholderColor3 = rgb(100, 100, 105);
                     ClearTextOnFocus = false;
                     Parent = items[ "multi_holder" ];
                     Name = "\0";
                     AnchorPoint = vec2(1, 0.5);
                     Position = dim2(1, -12, 0.5, 0);
-                    Size = dim2(0, 180, 0, 28);
+                    Size = dim2(0, 200, 0, 28);
                     BorderSizePixel = 0;
                     TextSize = 14;
                     BackgroundColor3 = rgb(22, 22, 24);
                     TextXAlignment = Enum.TextXAlignment.Left;
+                    ZIndex = 20;
                 });
                 library:create( "UICorner" , {
                     Parent = items[ "search_box" ];
@@ -651,56 +656,170 @@ a
                     ApplyStrokeMode = Enum.ApplyStrokeMode.Border
                 });
 
-                local function apply_search(query)
-                    query = string.lower(tostring(query or ""))
-                    local content = items[ "global_fade" ] and items[ "global_fade" ].Parent
-                    -- Filter elements under main content by name labels
-                    for _, gui in library[ "items" ]:GetDescendants() do
-                        if gui:IsA("TextLabel") or gui:IsA("TextButton") then
-                            local parent = gui.Parent
-                            if not parent then continue end
-                            -- Only hide element rows that look like settings rows
-                            if parent:IsA("Frame") or parent:IsA("TextButton") then
-                                local text = string.lower(gui.Text or "")
-                                if text == "" or text == "dropdown" then continue end
-                                if query == "" then
-                                    parent.Visible = true
-                                else
-                                    -- keep visible if matches
-                                    if string.find(text, query, 1, true) then
-                                        parent.Visible = true
-                                    end
-                                end
-                            end
-                        end
-                    end
-                    if query == "" then
-                        for _, gui in library[ "items" ]:GetDescendants() do
-                            if gui:IsA("Frame") or gui:IsA("TextButton") then
-                                -- don't force every frame visible; skip structural frames
-                            end
+                items[ "search_results" ] = library:create( "Frame" , {
+                    Parent = library[ "items" ];
+                    Name = "\0";
+                    BackgroundColor3 = rgb(22, 22, 26);
+                    BorderSizePixel = 0;
+                    ClipsDescendants = true;
+                    Size = dim2(0, 220, 0, 0);
+                    Position = dim2(0, 0, 0, 0);
+                    ZIndex = 50;
+                    Visible = true;
+                });
+                library:create( "UICorner" , {
+                    Parent = items[ "search_results" ];
+                    CornerRadius = dim(0, 8)
+                });
+                local searchStroke = library:create( "UIStroke" , {
+                    Color = themes.preset.accent;
+                    Parent = items[ "search_results" ];
+                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
+                    Thickness = 1;
+                });
+                -- track stroke color with accent updates
+                pcall(function()
+                    if not themes.utility.accent.Color then themes.utility.accent.Color = {} end
+                    insert(themes.utility.accent.Color, searchStroke)
+                end)
+
+                items[ "search_scroll" ] = library:create( "ScrollingFrame" , {
+                    Parent = items[ "search_results" ];
+                    BackgroundTransparency = 1;
+                    BorderSizePixel = 0;
+                    Size = dim2(1, 0, 1, 0);
+                    CanvasSize = dim2(0, 0, 0, 0);
+                    AutomaticCanvasSize = Enum.AutomaticSize.Y;
+                    ScrollBarThickness = 3;
+                    ScrollBarImageColor3 = themes.preset.accent;
+                    ZIndex = 51;
+                }); library:apply_theme(items[ "search_scroll" ], "accent", "ScrollBarImageColor3");
+
+                library:create( "UIListLayout" , {
+                    Parent = items[ "search_scroll" ];
+                    Padding = dim(0, 4);
+                    SortOrder = Enum.SortOrder.LayoutOrder
+                });
+                library:create( "UIPadding" , {
+                    Parent = items[ "search_scroll" ];
+                    PaddingTop = dim(0, 6);
+                    PaddingBottom = dim(0, 6);
+                    PaddingLeft = dim(0, 6);
+                    PaddingRight = dim(0, 6)
+                });
+
+                local function clear_search_results()
+                    for _, child in items[ "search_scroll" ]:GetChildren() do
+                        if child:IsA("TextButton") then
+                            child:Destroy()
                         end
                     end
                 end
 
-                items[ "search_box" ]:GetPropertyChangedSignal("Text"):Connect(function()
+                local function position_search_results()
+                    local box = items[ "search_box" ]
+                    items[ "search_results" ].Position = dim_offset(
+                        box.AbsolutePosition.X + box.AbsoluteSize.X - 220,
+                        box.AbsolutePosition.Y + box.AbsoluteSize.Y + 6
+                    )
+                end
+
+                local function update_search_results()
                     local q = string.lower(items[ "search_box" ].Text or "")
+                    clear_search_results()
+                    position_search_results()
+
+                    if q == "" or #q < 1 then
+                        library:tween(items[ "search_results" ], {Size = dim2(0, 220, 0, 0)}, Enum.EasingStyle.Quad, 0.15)
+                        return
+                    end
+
+                    local matches = {}
+                    local seen = {}
                     for _, gui in library[ "items" ]:GetDescendants() do
-                        -- Filter setting rows (toggle/dropdown/slider rows) by their name label
-                        if gui:IsA("TextLabel") and (gui.Name == "\0" or gui.Name == "name") then
-                            local row = gui.Parent
-                            if row and (row:IsA("Frame") or row:IsA("TextButton")) then
-                                local text = string.lower(gui.Text or "")
-                                if text ~= "" and text ~= "dropdown" and #text > 1 then
-                                    if q == "" then
-                                        row.Visible = true
-                                    else
-                                        row.Visible = string.find(text, q, 1, true) ~= nil
-                                    end
+                        if gui:IsA("TextLabel") then
+                            local text = gui.Text or ""
+                            local lower = string.lower(text)
+                            if #text > 1 and lower ~= "dropdown" and not string.find(lower, "search", 1, true) then
+                                if string.find(lower, q, 1, true) and not seen[lower] then
+                                    seen[lower] = true
+                                    insert(matches, text)
+                                    if #matches >= 12 then break end
                                 end
                             end
                         end
                     end
+
+                    for _, name in matches do
+                        local btn = library:create( "TextButton" , {
+                            Parent = items[ "search_scroll" ];
+                            FontFace = fonts.small;
+                            Text = name;
+                            TextColor3 = rgb(230, 230, 235);
+                            TextSize = 13;
+                            TextXAlignment = Enum.TextXAlignment.Left;
+                            BackgroundColor3 = rgb(32, 32, 38);
+                            BackgroundTransparency = 0.15;
+                            BorderSizePixel = 0;
+                            Size = dim2(1, 0, 0, 28);
+                            AutoButtonColor = false;
+                            ZIndex = 52;
+                        });
+                        library:create( "UICorner" , {
+                            Parent = btn;
+                            CornerRadius = dim(0, 5)
+                        });
+                        library:create( "UIPadding" , {
+                            Parent = btn;
+                            PaddingLeft = dim(0, 10)
+                        });
+                        btn.MouseEnter:Connect(function()
+                            library:tween(btn, {BackgroundColor3 = themes.preset.accent, TextColor3 = rgb(255,255,255)}, Enum.EasingStyle.Quad, 0.12)
+                        end)
+                        btn.MouseLeave:Connect(function()
+                            library:tween(btn, {BackgroundColor3 = rgb(32, 32, 38), TextColor3 = rgb(230,230,235)}, Enum.EasingStyle.Quad, 0.12)
+                        end)
+                        btn.MouseButton1Click:Connect(function()
+                            items[ "search_box" ].Text = name
+                            -- Highlight matching rows in current view
+                            for _, gui in library[ "items" ]:GetDescendants() do
+                                if gui:IsA("TextLabel") and string.lower(gui.Text or "") == string.lower(name) then
+                                    local row = gui.Parent
+                                    if row and row:IsA("GuiObject") then
+                                        row.Visible = true
+                                    end
+                                end
+                            end
+                            library:tween(items[ "search_results" ], {Size = dim2(0, 220, 0, 0)}, Enum.EasingStyle.Quad, 0.15)
+                        end)
+                    end
+
+                    local h = math.clamp(#matches * 32 + 12, 0, 220)
+                    if #matches == 0 then
+                        h = 40
+                        local empty = library:create( "TextLabel" , {
+                            Parent = items[ "search_scroll" ];
+                            FontFace = fonts.small;
+                            Text = "No results";
+                            TextColor3 = rgb(140, 140, 145);
+                            TextSize = 13;
+                            BackgroundTransparency = 1;
+                            Size = dim2(1, 0, 0, 28);
+                            ZIndex = 52;
+                        });
+                    end
+                    library:tween(items[ "search_results" ], {Size = dim2(0, 220, 0, h)}, Enum.EasingStyle.Quad, 0.18)
+                end
+
+                items[ "search_box" ]:GetPropertyChangedSignal("Text"):Connect(update_search_results)
+                items[ "search_box" ].Focused:Connect(function()
+                    position_search_results()
+                    update_search_results()
+                end)
+                items[ "search_box" ].FocusLost:Connect(function()
+                    task.delay(0.2, function()
+                        library:tween(items[ "search_results" ], {Size = dim2(0, 220, 0, 0)}, Enum.EasingStyle.Quad, 0.15)
+                    end)
                 end)
                 
                 library:create( "Frame" , {
@@ -3717,22 +3836,40 @@ a
             return setmetatable(cfg, library)
         end 
 
-        function library:init_config(window) 
-            window:seperator({name = "Settings"})
-            local main = window:tab({name = "Configs", tabs = {"Main"}})
-            
-            local column = main:column({})
-            local section = column:section({name = "Configs", size = 1, default = true, icon = "rbxassetid://139628202576511"})
-            config_holder = section:list({options = {"Report", "This", "Error", "To", "Finobe"}, callback = function(option) end, flag = "config_name_list"}); library:update_config_list()
-            
-            local column = main:column({})
-            local section = column:section({name = "Settings", side = "right", size = 1, default = true, icon = "rbxassetid://129380150574313"})
-            section:textbox({name = "Config name:", flag = "config_name_text"})
-            section:button({name = "Save", callback = function() writefile(library.directory .. "/configs/" .. flags["config_name_text"] or flags["config_name_list"] .. ".cfg", library:get_config()) library:update_config_list() notifications:create_notification({name = "Configs", info = "Saved config to:\n" .. flags["config_name_list"] or flags["config_name_text"]}) end}) 
-            section:button({name = "Load", callback = function() library:load_config(readfile(library.directory .. "/configs/" .. flags["config_name_list"] .. ".cfg"))  library:update_config_list() notifications:create_notification({name = "Configs", info = "Loaded config:\n" .. flags["config_name_list"]}) end})
-            section:button({name = "Delete", callback = function() delfile(library.directory .. "/configs/" .. flags["config_name_list"] .. ".cfg")  library:update_config_list() notifications:create_notification({name = "Configs", info = "Deleted config:\n" .. flags["config_name_list"]}) end})
-            section:colorpicker({name = "Menu Accent", callback = function(color, alpha) library:update_theme("accent", color) end, color = themes.preset.accent})
-            section:keybind({name = "Menu Bind", callback = function(bool) window.toggle_menu(bool) end, default = true})
+        function library:init_config(window)
+            -- Config UI is merged into the Settings tab by the script (PoloHub).
+            -- Keep this as a lightweight no-op so older scripts don't error.
+            return
+        end
+
+        function library:build_settings_config(section)
+            config_holder = section:list({options = {"default"}, callback = function() end, flag = "config_name_list"})
+            library:update_config_list()
+            section:textbox({name = "Config name", flag = "config_name_text"})
+            section:button({name = "Save Config", callback = function()
+                local name = flags["config_name_text"] or flags["config_name_list"] or "default"
+                writefile(library.directory .. "/configs/" .. name .. ".cfg", library:get_config())
+                library:update_config_list()
+                notifications:create_notification({name = "Configs", info = "Saved config:\n" .. name})
+            end})
+            section:button({name = "Load Config", callback = function()
+                local name = flags["config_name_list"] or flags["config_name_text"] or "default"
+                local path = library.directory .. "/configs/" .. name .. ".cfg"
+                if isfile(path) then
+                    library:load_config(readfile(path))
+                    library:update_config_list()
+                    notifications:create_notification({name = "Configs", info = "Loaded config:\n" .. name})
+                end
+            end})
+            section:button({name = "Delete Config", callback = function()
+                local name = flags["config_name_list"] or "default"
+                local path = library.directory .. "/configs/" .. name .. ".cfg"
+                if isfile(path) then
+                    delfile(path)
+                    library:update_config_list()
+                    notifications:create_notification({name = "Configs", info = "Deleted config:\n" .. name})
+                end
+            end})
         end
     --
 
