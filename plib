@@ -431,8 +431,13 @@ a
             insert(themes.utility[theme][property], instance)
         end
 
+        local function color_near(a, b)
+            if typeof(a) ~= "Color3" or typeof(b) ~= "Color3" then return a == b end
+            return math.abs(a.R - b.R) < 0.03 and math.abs(a.G - b.G) < 0.03 and math.abs(a.B - b.B) < 0.03
+        end
+
         function library:update_theme(theme, color)
-            -- Only recolor instances that still use the previous accent (keeps OFF toggles correct)
+            -- Recolor registered instances that still use the previous accent
             local old = themes.preset[theme]
             local bucket = themes.utility[theme]
             if bucket then
@@ -442,12 +447,13 @@ a
                             pcall(function()
                                 local cur = object[property_name]
                                 if property_name == "BackgroundColor3" then
-                                    if cur == old then
+                                    -- ON toggles / fills that match old accent → new accent
+                                    -- also catch near-matches (float / tween leftovers)
+                                    if color_near(cur, old) then
                                         object[property_name] = color
                                     end
                                 else
-                                    -- text / image / scrollbar can always follow accent
-                                    if cur == old or property_name == "ScrollBarImageColor3" then
+                                    if color_near(cur, old) or property_name == "ScrollBarImageColor3" then
                                         object[property_name] = color
                                     end
                                 end
