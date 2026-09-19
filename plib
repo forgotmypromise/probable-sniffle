@@ -500,6 +500,9 @@ a
                 name = properties.name or properties.Name or "nebula";
                 game_name = properties.gameInfo or properties.game_info or properties.GameInfo or "Milenium for Counter-Strike: Global Offensive";
                 size = properties.size or properties.Size or dim2(0, 700, 0, 565);
+                if uis.TouchEnabled and not uis.KeyboardEnabled then
+                    size = properties.size or properties.Size or dim2(0, 520, 0, 420);
+                end
                 selected_tab;
                 items = {};
 
@@ -616,6 +619,83 @@ a
                     BorderSizePixel = 0;
                     BackgroundColor3 = rgb(255, 255, 255)
                 }); cfg.multi_holder = items[ "multi_holder" ];
+
+                -- Global search bar
+                items[ "search_box" ] = library:create( "TextBox" , {
+                    FontFace = fonts.small;
+                    TextColor3 = rgb(245, 245, 245);
+                    BorderColor3 = rgb(0, 0, 0);
+                    Text = "";
+                    PlaceholderText = "Search...";
+                    PlaceholderColor3 = rgb(100, 100, 105);
+                    ClearTextOnFocus = false;
+                    Parent = items[ "multi_holder" ];
+                    Name = "\0";
+                    AnchorPoint = vec2(1, 0.5);
+                    Position = dim2(1, -12, 0.5, 0);
+                    Size = dim2(0, 180, 0, 28);
+                    BorderSizePixel = 0;
+                    TextSize = 14;
+                    BackgroundColor3 = rgb(22, 22, 24);
+                    TextXAlignment = Enum.TextXAlignment.Left;
+                });
+                library:create( "UICorner" , {
+                    Parent = items[ "search_box" ];
+                    CornerRadius = dim(0, 6)
+                });
+                library:create( "UIPadding" , {
+                    Parent = items[ "search_box" ];
+                    PaddingLeft = dim(0, 10);
+                    PaddingRight = dim(0, 8)
+                });
+                library:create( "UIStroke" , {
+                    Color = rgb(33, 33, 38);
+                    Parent = items[ "search_box" ];
+                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+                });
+
+                local function apply_search(query)
+                    query = string.lower(tostring(query or ""))
+                    local content = items[ "global_fade" ] and items[ "global_fade" ].Parent
+                    -- Filter elements under main content by name labels
+                    for _, gui in library[ "items" ]:GetDescendants() do
+                        if gui:IsA("TextLabel") or gui:IsA("TextButton") then
+                            local parent = gui.Parent
+                            if not parent then continue end
+                            -- Only hide element rows that look like settings rows
+                            if parent:IsA("Frame") or parent:IsA("TextButton") then
+                                local text = string.lower(gui.Text or "")
+                                if text == "" or text == "dropdown" then continue end
+                                if query == "" then
+                                    parent.Visible = true
+                                else
+                                    -- keep visible if matches
+                                    if string.find(text, query, 1, true) then
+                                        parent.Visible = true
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    if query == "" then
+                        for _, gui in library[ "items" ]:GetDescendants() do
+                            if gui:IsA("Frame") or gui:IsA("TextButton") then
+                                -- don't force every frame visible; skip structural frames
+                            end
+                        end
+                    end
+                end
+
+                items[ "search_box" ]:GetPropertyChangedSignal("Text"):Connect(function()
+                    local q = string.lower(items[ "search_box" ].Text or "")
+                    for _, gui in library[ "items" ]:GetDescendants() do
+                        if gui.Name == "PoloSearchRow" or (gui:GetAttribute("PoloSearchable") == true) then
+                            local label = gui:FindFirstChild("name") or gui:FindFirstChildWhichIsA("TextLabel")
+                            local text = label and string.lower(label.Text or "") or ""
+                            gui.Visible = (q == "" or string.find(text, q, 1, true) ~= nil)
+                        end
+                    end
+                end)
                 
                 library:create( "Frame" , {
                     AnchorPoint = vec2(0, 1);
