@@ -686,10 +686,19 @@ a
                 items[ "search_box" ]:GetPropertyChangedSignal("Text"):Connect(function()
                     local q = string.lower(items[ "search_box" ].Text or "")
                     for _, gui in library[ "items" ]:GetDescendants() do
-                        if gui.Name == "PoloSearchRow" or (gui:GetAttribute("PoloSearchable") == true) then
-                            local label = gui:FindFirstChild("name") or gui:FindFirstChildWhichIsA("TextLabel")
-                            local text = label and string.lower(label.Text or "") or ""
-                            gui.Visible = (q == "" or string.find(text, q, 1, true) ~= nil)
+                        -- Filter setting rows (toggle/dropdown/slider rows) by their name label
+                        if gui:IsA("TextLabel") and (gui.Name == "\0" or gui.Name == "name") then
+                            local row = gui.Parent
+                            if row and (row:IsA("Frame") or row:IsA("TextButton")) then
+                                local text = string.lower(gui.Text or "")
+                                if text ~= "" and text ~= "dropdown" and #text > 1 then
+                                    if q == "" then
+                                        row.Visible = true
+                                    else
+                                        row.Visible = string.find(text, q, 1, true) ~= nil
+                                    end
+                                end
+                            end
                         end
                     end
                 end)
@@ -2161,63 +2170,145 @@ a
                         ClipsDescendants = true;
                         BorderColor3 = rgb(0, 0, 0);
                         BorderSizePixel = 0;
-                        BackgroundColor3 = rgb(33, 33, 35);
+                        BackgroundColor3 = rgb(28, 28, 32);
                         ZIndex = 10;
-                    });
-                    
-                    library:create( "UIPadding" , {
-                        PaddingBottom = dim(0, 6);
-                        PaddingTop = dim(0, 3);
-                        PaddingLeft = dim(0, 3);
-                        Parent = items[ "outline" ]
-                    });
-                    
-                    library:create( "UIListLayout" , {
-                        Parent = items[ "outline" ];
-                        Padding = dim(0, 5);
-                        SortOrder = Enum.SortOrder.LayoutOrder
                     });
                     
                     library:create( "UICorner" , {
                         Parent = items[ "outline" ];
+                        CornerRadius = dim(0, 6)
+                    });
+
+                    library:create( "UIStroke" , {
+                        Color = rgb(45, 45, 52);
+                        Parent = items[ "outline" ];
+                        ApplyStrokeMode = Enum.ApplyStrokeMode.Border;
+                        ZIndex = 10;
+                    });
+
+                    items[ "search" ] = library:create( "TextBox" , {
+                        FontFace = fonts.small;
+                        TextColor3 = rgb(245, 245, 245);
+                        PlaceholderText = "Search...";
+                        PlaceholderColor3 = rgb(100, 100, 108);
+                        ClearTextOnFocus = false;
+                        Text = "";
+                        Parent = items[ "outline" ];
+                        Name = "\0";
+                        Size = dim2(1, -10, 0, 24);
+                        Position = dim2(0, 5, 0, 6);
+                        BorderSizePixel = 0;
+                        TextSize = 13;
+                        BackgroundColor3 = rgb(20, 20, 24);
+                        TextXAlignment = Enum.TextXAlignment.Left;
+                        ZIndex = 11;
+                    });
+
+                    library:create( "UICorner" , {
+                        Parent = items[ "search" ];
                         CornerRadius = dim(0, 4)
                     });
+
+                    library:create( "UIPadding" , {
+                        Parent = items[ "search" ];
+                        PaddingLeft = dim(0, 8);
+                        PaddingRight = dim(0, 6)
+                    });
+
+                    items[ "scroll" ] = library:create( "ScrollingFrame" , {
+                        Parent = items[ "outline" ];
+                        Name = "\0";
+                        BackgroundTransparency = 1;
+                        Position = dim2(0, 0, 0, 34);
+                        Size = dim2(1, 0, 1, -38);
+                        BorderSizePixel = 0;
+                        ScrollBarThickness = 3;
+                        ScrollBarImageColor3 = themes.preset.accent;
+                        CanvasSize = dim2(0, 0, 0, 0);
+                        AutomaticCanvasSize = Enum.AutomaticSize.Y;
+                        ZIndex = 10;
+                    }); library:apply_theme(items[ "scroll" ], "accent", "ScrollBarImageColor3");
+
+                    library:create( "UIListLayout" , {
+                        Parent = items[ "scroll" ];
+                        Padding = dim(0, 4);
+                        SortOrder = Enum.SortOrder.LayoutOrder
+                    });
+
+                    library:create( "UIPadding" , {
+                        PaddingBottom = dim(0, 6);
+                        PaddingTop = dim(0, 2);
+                        PaddingLeft = dim(0, 6);
+                        PaddingRight = dim(0, 4);
+                        Parent = items[ "scroll" ]
+                    });
+
+                    items[ "search" ]:GetPropertyChangedSignal("Text"):Connect(function()
+                        local q = string.lower(items[ "search" ].Text or "")
+                        for _, option in cfg.option_instances do
+                            if option and option.Parent then
+                                local t = string.lower(option.Text or "")
+                                option.Visible = (q == "" or string.find(t, q, 1, true) ~= nil)
+                            end
+                        end
+                    end)
                 -- 
             end 
 
             function cfg.render_option(text)
                 local button = library:create( "TextButton" , {
                     FontFace = fonts.small;
-                    TextColor3 = rgb(72, 72, 73);
+                    TextColor3 = rgb(160, 160, 165);
                     BorderColor3 = rgb(0, 0, 0);
                     Text = text;
-                    Parent = items[ "outline" ];
+                    Parent = items[ "scroll" ];
                     Name = "\0";
-                    Size = dim2(1, -12, 0, 0);
+                    Size = dim2(1, -8, 0, 22);
                     BackgroundTransparency = 1;
                     TextXAlignment = Enum.TextXAlignment.Left;
                     BorderSizePixel = 0;
-                    AutomaticSize = Enum.AutomaticSize.Y;
-                    TextSize = 14;
-                    BackgroundColor3 = rgb(255, 255, 255);
-                    ZIndex = 10;
+                    TextSize = 13;
+                    BackgroundColor3 = rgb(40, 40, 46);
+                    AutoButtonColor = false;
+                    ZIndex = 11;
                 }); library:apply_theme(button, "accent", "TextColor3");
+
+                library:create( "UICorner" , {
+                    Parent = button;
+                    CornerRadius = dim(0, 4)
+                });
                 
                 library:create( "UIPadding" , {
                     Parent = button;
-                    PaddingTop = dim(0, 1);
-                    PaddingRight = dim(0, 5);
-                    PaddingLeft = dim(0, 5)
+                    PaddingTop = dim(0, 2);
+                    PaddingRight = dim(0, 6);
+                    PaddingLeft = dim(0, 8)
                 });
+
+                button.MouseEnter:Connect(function()
+                    if flags[cfg.flag] == text or (type(flags[cfg.flag]) == "table" and find(flags[cfg.flag], text)) then return end
+                    library:tween(button, {BackgroundTransparency = 0.35, TextColor3 = rgb(230, 230, 235)}, Enum.EasingStyle.Quad, 0.12)
+                end)
+                button.MouseLeave:Connect(function()
+                    if flags[cfg.flag] == text or (type(flags[cfg.flag]) == "table" and find(flags[cfg.flag], text)) then return end
+                    library:tween(button, {BackgroundTransparency = 1, TextColor3 = rgb(160, 160, 165)}, Enum.EasingStyle.Quad, 0.12)
+                end)
                 
                 return button
             end
             
             function cfg.set_visible(bool)
-                local a = bool and cfg.y_size or 0
-                library:tween(items[ "dropdown_holder" ], {Size = dim_offset(items[ "dropdown" ].AbsoluteSize.X, a)})
+                local max_h = 180
+                local h = bool and math.min(cfg.y_size + 40, max_h) or 0
+                library:tween(items[ "dropdown_holder" ], {Size = dim_offset(math.max(items[ "dropdown" ].AbsoluteSize.X, 160), h)}, Enum.EasingStyle.Quad, 0.18)
 
                 items[ "dropdown_holder" ].Position = dim2(0, items[ "dropdown" ].AbsolutePosition.X, 0, items[ "dropdown" ].AbsolutePosition.Y + 80)
+                if bool then
+                    items[ "search" ].Text = ""
+                    for _, option in cfg.option_instances do
+                        if option then option.Visible = true end
+                    end
+                end
                 if not (self.sanity and library.current_open == self) then 
                     library:close_element(cfg)
                 end
@@ -2254,7 +2345,7 @@ a
 
                 for _, option in list do 
                     local button = cfg.render_option(option)
-                    cfg.y_size += button.AbsoluteSize.Y + 6 -- super annoying manual sizing but oh well
+                    cfg.y_size += 26
                     insert(cfg.option_instances, button)
                     
                     button.MouseButton1Down:Connect(function()
